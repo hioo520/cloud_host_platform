@@ -99,3 +99,32 @@ export interface DashboardStats {
   highDiskHosts: number; // 磁盘高负载数
   offlineHosts: number; // 机器不在线数
 }
+
+// 业务维度指标表
+export interface BusinessMetric {
+  businessName: string; // 业务名
+  sampleTime: string; // 采样时间
+  taskCount: number; // 任务数
+  successCount: number; // 成功任务数
+  failureCount: number; // 失败任务数
+  emptyCount: number; // 空任务数
+  dedupCount: number; // 消重任务数
+  hostCount: number; // 关联主机数
+}
+
+// 多维度筛选指标表
+export interface CustomMetric extends HostMetric {
+  vendor: string; // 云主机厂商
+  region: string; // 区域
+  system: string; // 系统
+  department: string; // 使用部门
+  owner: string; // 负责人
+  channels: Array<{
+    businessName: string;
+    channelName: string;
+    taskCount: number;
+    successCount: number;
+    failureCount: number;
+    successRate: string;
+  }>; // 关联的通道和业务信息
+}

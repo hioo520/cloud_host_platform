@@ -5,7 +5,9 @@ import type {
   ChannelMetricSummary,
   ChannelMetricDetail,
   HostChangeRecord,
-  DashboardStats
+  DashboardStats,
+  BusinessMetric,
+  CustomMetric
 } from '../types';
 import { generateMockData } from '../mocks';
 
@@ -250,6 +252,81 @@ class CloudHostService {
       channelDetails,
       total
     };
+  }
+
+  // 获取业务维度指标数据
+  async getBusinessMetrics(params: {
+    page?: number;
+    pageSize?: number;
+    search?: string;
+  } = {}): Promise<{
+    data: BusinessMetric[];
+    total: number;
+  }> {
+    await delay(500);
+    const mockData = generateMockData();
+    const { page = 1, pageSize = 10, search = '' } = params;
+    
+    let filteredData = mockData.businessMetrics;
+    
+    // 搜索过滤
+    if (search) {
+      filteredData = filteredData.filter(metric => 
+        metric.businessName.includes(search)
+      );
+    }
+    
+    // 分页处理
+    const total = filteredData.length;
+    const start = (page - 1) * pageSize;
+    const end = start + pageSize;
+    const data = filteredData.slice(start, end);
+    
+    return { data, total };
+  }
+
+  // 获取自定义多维度指标数据
+  async getCustomMetrics(params: {
+    page?: number;
+    pageSize?: number;
+    search?: string;
+    hostIps?: string[];
+  } = {}): Promise<{
+    data: CustomMetric[];
+    total: number;
+  }> {
+    await delay(800);
+    const mockData = generateMockData();
+    const { page = 1, pageSize = 10, search = '', hostIps: filterHostIps } = params;
+    
+    let filteredData = mockData.customMetrics;
+    
+    // 按主机IP筛选
+    if (filterHostIps && filterHostIps.length > 0) {
+      filteredData = filteredData.filter(metric => 
+        filterHostIps.includes(metric.ip)
+      );
+    }
+    
+    // 搜索过滤
+    if (search) {
+      filteredData = filteredData.filter(metric => 
+        metric.ip.includes(search) ||
+        metric.vendor.includes(search) ||
+        metric.region.includes(search) ||
+        metric.system.includes(search) ||
+        metric.department.includes(search) ||
+        metric.owner.includes(search)
+      );
+    }
+    
+    // 分页处理
+    const total = filteredData.length;
+    const start = (page - 1) * pageSize;
+    const end = start + pageSize;
+    const data = filteredData.slice(start, end);
+    
+    return { data, total };
   }
 
   // 恢复最新状态

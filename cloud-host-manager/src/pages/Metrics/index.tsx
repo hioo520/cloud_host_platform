@@ -25,7 +25,7 @@ import {
   BarChartOutlined 
 } from '@ant-design/icons';
 import cloudHostService from '../../services/cloudHost';
-import type { HostMetric, ChannelMetricSummary, ChannelMetricDetail, CloudHost } from '../../types';
+import type { HostMetric, ChannelMetricSummary, ChannelMetricDetail, CloudHost, BusinessMetric, CustomMetric } from '../../types';
 import { formatPercentage } from '../../utils/format';
 
 const { TabPane } = Tabs;
@@ -61,19 +61,22 @@ const Metrics: React.FC = () => {
     { label: '空任务数', value: 'emptyCount' },
     { label: '消重任务数', value: 'dedupCount' },
     { label: '成功率', value: 'successRate' },
+    { label: '关联主机数', value: 'hostCount' },
   ];
 
   const [activeTab, setActiveTab] = useState('host');
   const [hostMetrics, setHostMetrics] = useState<HostMetric[]>([]);
   const [channelSummaries, setChannelSummaries] = useState<ChannelMetricSummary[]>([]);
   const [channelDetails, setChannelDetails] = useState<ChannelMetricDetail[]>([]);
+  const [businessMetrics, setBusinessMetrics] = useState<BusinessMetric[]>([]); // 新增业务维度数据
+  const [customMetrics, setCustomMetrics] = useState<CustomMetric[]>([]); // 新增多维度筛选数据
   const [allHosts, setAllHosts] = useState<CloudHost[]>([]);
   const [loading, setLoading] = useState(true);
   
   // 筛选条件
   const [selectedHostMetricKeys, setSelectedHostMetricKeys] = useState<string[]>(['cpuUsage', 'memoryUsage', 'diskUsage']);
   const [selectedChannelMetricKeys, setSelectedChannelMetricKeys] = useState<string[]>(['taskCount', 'successCount', 'failureCount']);
-  const [selectedBusinessMetricKeys, setSelectedBusinessMetricKeys] = useState<string[]>(['taskCount', 'successCount']);
+  const [selectedBusinessMetricKeys, setSelectedBusinessMetricKeys] = useState<string[]>(['taskCount', 'successCount', 'hostCount']);
   const [selectedHosts, setSelectedHosts] = useState<string[]>([]);
   const [dateRange, setDateRange] = useState<[string, string]>(['', '']);
   const [searchText, setSearchText] = useState('');
@@ -93,6 +96,20 @@ const Metrics: React.FC = () => {
       const firstHosts = mockData.cloudHosts.slice(0, 5).map(host => host.ip);
       setSelectedHosts(firstHosts);
       setCustomSelectedHosts(firstHosts);
+      
+      // 确保在获取主机数据后也触发一次指标数据获取
+      if (firstHosts.length > 0) {
+        // 延迟一下确保状态更新完成
+        setTimeout(() => {
+          if (activeTab === 'host') {
+            fetchMetrics();
+          } else if (activeTab === 'business') {
+            fetchBusinessMetrics();
+          } else if (activeTab === 'custom') {
+            fetchCustomMetrics();
+          }
+        }, 100);
+      }
     } catch (error) {
       console.error('获取主机数据失败:', error);
     }
@@ -119,15 +136,66 @@ const Metrics: React.FC = () => {
     }
   };
 
+  // 获取业务维度指标数据
+  const fetchBusinessMetrics = async () => {
+    try {
+      setLoading(true);
+      const { data: businessMetrics } = await cloudHostService.getBusinessMetrics({
+        page: 1,
+        pageSize: 1000,
+        search: searchText
+      });
+      
+      setBusinessMetrics(businessMetrics);
+    } catch (error) {
+      console.error('获取业务维度指标数据失败:', error);
+      message.error('获取业务维度指标数据失败');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  // 获取自定义多维度指标数据
+  const fetchCustomMetrics = async () => {
+    try {
+      setLoading(true);
+      const { data: customMetrics } = await cloudHostService.getCustomMetrics({
+        page: 1,
+        pageSize: 1000,
+        hostIps: customSelectedHosts,
+        search: searchText
+      });
+      
+      setCustomMetrics(customMetrics);
+    } catch (error) {
+      console.error('获取多维度筛选数据失败:', error);
+      message.error('获取多维度筛选数据失败');
+    } finally {
+      setLoading(false);
+    }
+  };
+
   useEffect(() => {
     fetchAllHosts();
   }, []);
 
   useEffect(() => {
-    if (selectedHosts.length > 0 && activeTab !== 'custom') {
+    if (selectedHosts.length > 0 && activeTab === 'host') {
       fetchMetrics();
     }
   }, [selectedHosts, selectedHostMetricKeys, selectedChannelMetricKeys, selectedBusinessMetricKeys, dateRange, searchText, activeTab]);
+
+  useEffect(() => {
+    if (activeTab === 'business') {
+      fetchBusinessMetrics();
+    }
+  }, [activeTab, searchText]);
+
+  useEffect(() => {
+    if (activeTab === 'custom') {
+      fetchCustomMetrics();
+    }
+  }, [activeTab, customSelectedHosts, searchText]);
 
   // 生成主机维度指标树节点
   const generateHostMetricTreeData = (): DataNode[] => [
@@ -326,19 +394,13 @@ const Metrics: React.FC = () => {
   };
 
   // 生成业务维度指标列
-  const generateChannelDetailColumns = (): ColumnsType<ChannelMetricDetail> => {
-    const columns: ColumnsType<ChannelMetricDetail> = [
+  const generateBusinessMetricColumns = (): ColumnsType<BusinessMetric> => {
+    const columns: ColumnsType<BusinessMetric> = [
       {
         title: '业务名',
         dataIndex: 'businessName',
         key: 'businessName',
         fixed: 'left',
-        width: 120,
-      },
-      {
-        title: '云主机IP',
-        dataIndex: 'ip',
-        key: 'ip',
         width: 150,
       },
       {
@@ -367,6 +429,16 @@ const Metrics: React.FC = () => {
             title: option.label,
             dataIndex: key,
             key,
+            render: (value) => {
+              if (typeof value === 'number') {
+                // 对于百分比类型的字段进行格式化
+                if (key === 'hostCount') {
+                  return value;
+                }
+                return value;
+              }
+              return value;
+            }
           });
         }
       }
@@ -376,8 +448,8 @@ const Metrics: React.FC = () => {
   };
 
   // 生成自定义筛选的列（多维度筛选Tab专用）
-  const generateCustomMetricColumns = (): ColumnsType<any> => {
-    const columns: ColumnsType<any> = [
+  const generateCustomMetricColumns = (): ColumnsType<CustomMetric> => {
+    const columns: ColumnsType<CustomMetric> = [
       {
         title: '云主机IP',
         dataIndex: 'ip',
@@ -439,15 +511,37 @@ const Metrics: React.FC = () => {
               title: option.label,
               key: 'channel-successRate',
               render: (_, record) => {
-                const rate = record.taskCount > 0 ? (record.successCount / record.taskCount) * 100 : 0;
-                return formatPercentage(rate);
+                // 对于CustomMetric，我们需要从channels数组中获取数据
+                if (record.channels && record.channels.length > 0) {
+                  // 这里简化处理，显示第一个通道的成功率
+                  const firstChannel = record.channels[0];
+                  return firstChannel.successRate || '0%';
+                }
+                return '0%';
               },
             });
           } else {
             columns.push({
               title: option.label,
-              dataIndex: metricKey,
               key: `channel-${metricKey}`,
+              render: (_, record) => {
+                // 对于CustomMetric，我们需要从channels数组中获取数据
+                if (record.channels && record.channels.length > 0) {
+                  // 这里简化处理，显示第一个通道的对应字段
+                  const firstChannel = record.channels[0];
+                  switch (metricKey) {
+                    case 'taskCount':
+                      return firstChannel.taskCount;
+                    case 'successCount':
+                      return firstChannel.successCount;
+                    case 'failureCount':
+                      return firstChannel.failureCount;
+                    default:
+                      return '';
+                  }
+                }
+                return '';
+              },
             });
           }
         }
@@ -462,15 +556,39 @@ const Metrics: React.FC = () => {
               title: option.label,
               key: 'business-successRate',
               render: (_, record) => {
-                const rate = record.taskCount > 0 ? (record.successCount / record.taskCount) * 100 : 0;
-                return formatPercentage(rate);
+                // 对于CustomMetric，我们需要从channels数组中获取数据
+                if (record.channels && record.channels.length > 0) {
+                  // 这里简化处理，显示第一个通道的成功率
+                  const firstChannel = record.channels[0];
+                  return firstChannel.successRate || '0%';
+                }
+                return '0%';
               },
             });
           } else {
             columns.push({
               title: option.label,
-              dataIndex: metricKey,
               key: `business-${metricKey}`,
+              render: (_, record) => {
+                // 对于CustomMetric，我们需要从channels数组中计算业务维度数据
+                if (record.channels && record.channels.length > 0) {
+                  // 这里简化处理，显示第一个通道的对应字段
+                  const firstChannel = record.channels[0];
+                  switch (metricKey) {
+                    case 'taskCount':
+                      return firstChannel.taskCount;
+                    case 'successCount':
+                      return firstChannel.successCount;
+                    case 'failureCount':
+                      return firstChannel.failureCount;
+                    case 'hostCount':
+                      return 1; // 简化处理，每个记录代表一个主机
+                    default:
+                      return '';
+                  }
+                }
+                return '';
+              },
             });
           }
         }
@@ -484,7 +602,7 @@ const Metrics: React.FC = () => {
   const getCustomFilteredData = () => {
     // 这里应该根据选择的主机和指标进行数据过滤
     // 简化实现，返回主机指标数据
-    return hostMetrics.filter(metric => customSelectedHosts.includes(metric.ip));
+    return customMetrics.filter(metric => customSelectedHosts.includes(metric.ip));
   };
 
   // 下载数据
@@ -503,7 +621,13 @@ const Metrics: React.FC = () => {
 
   // 处理搜索
   const handleSearch = () => {
-    fetchMetrics();
+    if (activeTab === 'host') {
+      fetchMetrics();
+    } else if (activeTab === 'business') {
+      fetchBusinessMetrics();
+    } else if (activeTab === 'custom') {
+      fetchCustomMetrics();
+    }
   };
 
   return (
@@ -593,14 +717,14 @@ const Metrics: React.FC = () => {
               tab={
                 <span>
                   <BarChartOutlined />
-                  业务维度 ({channelDetails.length})
+                  业务维度 ({businessMetrics.length})
                 </span>
               } 
               key="business"
             >
               <Table
-                columns={generateChannelDetailColumns()}
-                dataSource={channelDetails}
+                columns={generateBusinessMetricColumns()}
+                dataSource={businessMetrics}
                 loading={loading}
                 pagination={{
                   pageSize: 10,
@@ -608,7 +732,7 @@ const Metrics: React.FC = () => {
                   showQuickJumper: true,
                 }}
                 scroll={{ x: 1000 }}
-                rowKey={(record) => `${record.parentId}-${record.businessName}`}
+                rowKey="businessName"
               />
             </TabPane>
             {/* 新增的多维度筛选Tab */}
