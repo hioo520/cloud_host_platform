@@ -101,7 +101,7 @@ const AppLayout: React.FC = () => {
           items={menuItems}
         />
       </Sider>
-      <Layout style={{ marginLeft: collapsed ? 80 : 220, transition: 'margin-left 0.2s' }}>
+      <Layout style={{ marginLeft: collapsed ? 0 : 0, transition: 'margin-left 0.2s' }}>
         <Header style={{ 
           padding: 0, 
           background: colorBgContainer,
