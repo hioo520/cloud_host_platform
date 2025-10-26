@@ -200,6 +200,7 @@ class CloudHostService {
     page?: number;
     pageSize?: number;
     search?: string;
+    hostIps?: string[]; // 支持按主机IP筛选
   } = {}): Promise<{
     hostMetrics: HostMetric[];
     channelSummaries: ChannelMetricSummary[];
@@ -208,9 +209,16 @@ class CloudHostService {
   }> {
     await delay(800);
     const mockData = generateMockData();
-    const { page = 1, pageSize = 10, search = '' } = params;
+    const { page = 1, pageSize = 10, search = '', hostIps: filterHostIps } = params;
     
     let filteredHostMetrics = mockData.hostMetrics;
+    
+    // 按主机IP筛选
+    if (filterHostIps && filterHostIps.length > 0) {
+      filteredHostMetrics = filteredHostMetrics.filter(metric => 
+        filterHostIps.includes(metric.ip)
+      );
+    }
     
     // 搜索过滤
     if (search) {
@@ -226,9 +234,9 @@ class CloudHostService {
     const paginatedHostMetrics = filteredHostMetrics.slice(start, end);
     
     // 获取关联的通道数据
-    const hostIps = paginatedHostMetrics.map(metric => metric.ip);
+    const metricHostIps = paginatedHostMetrics.map(metric => metric.ip);
     const channelDetails = mockData.channelMetricDetails.filter(detail => 
-      hostIps.includes(detail.ip)
+      metricHostIps.includes(detail.ip)
     );
     
     const parentIds = [...new Set(channelDetails.map(detail => detail.parentId))];
